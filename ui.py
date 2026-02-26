@@ -1,4 +1,3 @@
-# ui.py
 import requests
 import streamlit as st
 import pandas as pd
@@ -74,10 +73,10 @@ if selected_orgnr:
         org = prof.get("org") or {}
         regn = prof.get("regnskap") or {}
         risk = prof.get("risk") or {}
+        pep = prof.get("pep") or {}
+        risk_summary = prof.get("risk_summary") or {}
 
-        # -----------------------
         # 1) Organisasjonsinfo
-        # -----------------------
         st.markdown("### Organisation")
         st.write(
             f"**{org.get('navn', 'N/A')}** "
@@ -93,9 +92,9 @@ if selected_orgnr:
             f"{org.get('naeringskode1_beskrivelse', '')}"
         )
 
-        # -----------------------
-        # 2) Nøkkeltall (metrics)
-        # -----------------------
+        # 2) Risk summary – meglerkort
+        st.markdown("### Risk summary")
+
         def fmt_mnok(value):
             if value is None:
                 return "–"
@@ -104,6 +103,50 @@ if selected_orgnr:
             except Exception:
                 return str(value)
 
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            st.metric(
+                label="Turnover",
+                value=fmt_mnok(risk_summary.get("omsetning")),
+            )
+
+        with col2:
+            st.metric(
+                label="Employees",
+                value=risk_summary.get("antall_ansatte", "–"),
+            )
+
+        with col3:
+            eq_ratio = risk_summary.get("egenkapitalandel")
+            eq_val = (
+                "–"
+                if eq_ratio is None
+                else f"{eq_ratio*100:,.1f} %".replace(",", " ")
+            )
+            st.metric(label="Equity ratio", value=eq_val)
+
+        with col4:
+            st.metric(
+                label="Risk score",
+                value=risk_summary.get("risk_score", "–"),
+            )
+
+        with col5:
+            st.metric(
+                label="PEP hits",
+                value=risk_summary.get("pep_hits", 0),
+            )
+
+        flags = risk_summary.get("risk_flags") or []
+        if flags:
+            st.write("Risk flags:")
+            for f in flags:
+                st.write(f"- {f}")
+        else:
+            st.write("No specific risk flags identified by the simple model.")
+
+        # 3) Nøkkeltall (gamle seksjonen, gjenbruker fmt_mnok)
         if regn and regn.get("regnskapsår") is not None:
             year = regn.get("regnskapsår")
 
@@ -138,9 +181,7 @@ if selected_orgnr:
                 )
                 st.metric(label="Equity ratio", value=eq_val)
 
-            # -----------------------
-            # 3) Resultat & balanse-tabeller
-            # -----------------------
+            # 4) Resultat & balanse-tabeller
             st.markdown("#### Profit and loss")
 
             pl_data = {
@@ -177,7 +218,7 @@ if selected_orgnr:
                     fmt_mnok(regn.get("totalresultat")),
                 ],
             }
-            st.table(pd.DataFrame(pl_data))  # statisk tabell [web:50][web:53]
+            st.table(pd.DataFrame(pl_data))
 
             st.markdown("#### Balance sheet")
 
@@ -216,24 +257,35 @@ if selected_orgnr:
                 ],
             }
             st.table(pd.DataFrame(bal_data))
-
-            # -----------------------
-            # 4) Enkel risikovurdering
-            # -----------------------
-            st.markdown("### Simple risk assessment")
-            st.write(f"Score: **{risk.get('score', 0)}**")
-            reasons = risk.get("reasons") or []
-            if reasons:
-                for r in reasons:
-                    st.write(f"- {r}")
-            else:
-                st.write("No specific risk factors identified by the simple model.")
         else:
             st.info("No open financial statements available for this organisation.")
 
-        # -----------------------
-        # 5) Rå JSON (debug)
-        # -----------------------
+        # 5) PEP / sanctions screening (demo)
+        st.markdown("### PEP / sanctions screening (demo)")
+        if pep:
+            st.write(f"Query name: {pep.get('query', org.get('navn', 'N/A'))}")
+            st.write(f"Matches: {pep.get('hit_count', 0)}")
+
+            hits = pep.get("hits") or []
+            if hits:
+                for h in hits:
+                    datasets = h.get("datasets") or []
+                    topics = h.get("topics") or []
+                    ds_str = ", ".join(datasets) if datasets else "n/a"
+                    topics_str = ", ".join(topics) if topics else "n/a"
+
+                    st.write(
+                        f"- {h.get('name', 'N/A')} "
+                        f"(schema: {h.get('schema', 'N/A')}, "
+                        f"datasets: {ds_str}, "
+                        f"topics: {topics_str})"
+                    )
+            else:
+                st.write("No PEP/sanctions matches found in OpenSanctions.")
+        else:
+            st.write("No PEP/sanctions data available for this organisation.")
+
+        # 6) Rå JSON (debug)
         st.markdown("### Raw /org response")
         st.json(prof)
 

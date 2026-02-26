@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:14
+    container_name: broker-postgres
+    environment:
+      POSTGRES_USER: tharusan
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: brokerdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: broker-api
+    depends_on:
+      - db
+    environment:
+      # matcher db.py, men vi bruker container-navn som host
+      DATABASE_URL: postgresql://tharusan:password123@db:5432/brokerdb
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: >
+      uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
